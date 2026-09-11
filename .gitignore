@@ -1,0 +1,6 @@
+# jsonnet
+vendor/
+
+# python
+__pycache__/
+*.egg-info/

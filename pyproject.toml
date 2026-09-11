@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openapi-libsonnet-gen"
+version = "0.1.0"
+description = "Generate Jsonnet libraries from pinned OpenAPI schemas"
+requires-python = ">=3.8"
+dependencies = []
+
+[project.scripts]
+openapi-libsonnet-gen-download = "download:main"
+openapi-libsonnet-gen-generate = "generate:main"
+
+[tool.setuptools]
+py-modules = ["download", "generate"]

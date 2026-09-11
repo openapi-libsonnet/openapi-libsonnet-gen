@@ -1,0 +1,134 @@
+name: Generate openapi-libsonnet
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+
+jobs:
+  generate:
+    environment: openapi-libsonnet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      - name: Restore pip cache
+        id: pip-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pyproject.toml') }}
+
+      - name: Install generator
+        run: python -m pip install --editable .
+
+      - name: Save pip cache
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/pip
+          key: ${{ steps.pip-cache.outputs.cache-primary-key }}
+
+      - name: Restore schemas
+        id: schemas-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: schema
+          key: schemas-${{ hashFiles('versions.json') }}
+
+      - name: Download schemas
+        run: openapi-libsonnet-gen-download
+
+      - name: Save schemas
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: schema
+          key: ${{ steps.schemas-cache.outputs.cache-primary-key }}
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          cache: false
+
+      - name: Restore Jsonnet tools
+        id: jsonnet-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/go/bin
+            ~/go/pkg/mod
+            ~/.cache/go-build
+            vendor
+          key: go-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('jsonnetfile.lock.json') }}-jsonnet-0.22.0-jb-0.6.0
+
+      - name: Install Jsonnet tools
+        run: |
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          if [ ! -x "$(go env GOPATH)/bin/jsonnet" ] || \
+             [ ! -x "$(go env GOPATH)/bin/jsonnetfmt" ] || \
+             [ ! -x "$(go env GOPATH)/bin/jb" ]; then
+            go install github.com/google/go-jsonnet/cmd/jsonnet@v0.22.0
+            go install github.com/google/go-jsonnet/cmd/jsonnetfmt@v0.22.0
+            go install github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb@v0.6.0
+          fi
+          [ -d vendor ] || jb install
+
+      - name: Save Jsonnet tools
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/go/bin
+            ~/go/pkg/mod
+            ~/.cache/go-build
+            vendor
+          key: ${{ steps.jsonnet-cache.outputs.cache-primary-key }}
+
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.DEPLOY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DEPLOY_APP_PRIVATE_KEY }}
+          owner: openapi-libsonnet
+          repositories: openapi-libsonnet
+
+      - name: Checkout target repository
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ vars.TARGET_REPOSITORY }}
+          token: ${{ steps.app-token.outputs.token }}
+          path: openapi-libsonnet
+
+      - name: Generate libraries
+        run: openapi-libsonnet-gen-generate --output-dir openapi-libsonnet
+
+      - name: Open pull request
+        working-directory: openapi-libsonnet
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_BRANCH: ${{ vars.TARGET_BRANCH }}
+          TARGET_REPOSITORY: ${{ vars.TARGET_REPOSITORY }}
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m 'Generate OpenAPI libraries'
+          git push --force origin "HEAD:$TARGET_BRANCH"
+
+          base=$(gh repo view "$TARGET_REPOSITORY" --json defaultBranchRef --jq .defaultBranchRef.name)
+          number=$(gh pr list --repo "$TARGET_REPOSITORY" --head "$TARGET_BRANCH" --json number --jq '.[0].number')
+          if [ -z "$number" ]; then
+            gh pr create \
+              --repo "$TARGET_REPOSITORY" \
+              --base "$base" \
+              --head "$TARGET_BRANCH" \
+              --title 'Generate OpenAPI libraries' \
+              --body 'Generated from the pinned OpenAPI schemas in openapi-libsonnet-gen.'
+          fi

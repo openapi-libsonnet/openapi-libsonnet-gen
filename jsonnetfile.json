@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "dependencies": [
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/crdsonnet/crdsonnet.git",
+          "subdir": "crdsonnet"
+        }
+      },
+      "version": "f2f3c043f329edd4dd59ba89128258a59ee3363e"
+    }
+  ],
+  "legacyImports": true
+}
