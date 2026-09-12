@@ -17,7 +17,7 @@ def main():
     for version in args.versions or list(versions):
         config = versions[version]
         raw = subprocess.check_output([
-            'jsonnet', '-S', '-J', 'vendor', 'generate.jsonnet',
+            'jsonnet', '-S', '-J', 'vendor', config['generator'],
             '--tla-code-file', 'schema=' + config['schema'],
         ], cwd=root)
         formatted = subprocess.check_output(['jsonnetfmt', '-'], input=raw, cwd=root)
