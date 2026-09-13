@@ -1,5 +1,7 @@
 local crdsonnet = import 'github.com/crdsonnet/crdsonnet/crdsonnet/main.libsonnet';
 function(schema, refSource)
+  // Keep generator snippets readable while emitting valid docsonnet metadata keys.
+  local documentedRefSource = std.strReplace(refSource, 'function:', "'function':");
   local defsKey = if '$defs' in schema then '$defs' else 'definitions';
   local processor = crdsonnet.processor.new('ast') + {
     renderEngine+: {
@@ -45,4 +47,4 @@ function(schema, refSource)
   '\n+ { definitions: ' + std.join('\n+\n', [
     crdsonnet.schema.render(name, definitions[name] + { [defsKey]: definitions }, processor).toString()
     for name in std.objectFields(definitions)
-  ]) + '\n}\n' + refSource
+  ]) + '\n}\n' + documentedRefSource
